@@ -676,47 +676,50 @@ class owa_coreAPI {
 			
 			// If the module does not have nav links, register them. needed in case this function is called twice on
 			// same view.
-			if (empty($v->nav_links)) {
+			if ( empty( $v->nav_links ) ) {
+				
 				$v->registerNavigation();
 			}
 			
 			$module_nav = $v->getNavigationLinks();
 			
 			if ( $module_nav ) {
+
 				//loop through returned nav array
-				foreach ($module_nav as $group => $nav_links) {
+				foreach ( $module_nav as $group => $nav_links ) {
 					
-					foreach ($nav_links as $link) {	
-									
-						if (array_key_exists($group, $links)) {
-							
+					foreach ( $nav_links as $subgroup => $link ) {	
 						
-							
-							// check to see if link is already present in the main array
-							if (array_key_exists($link['anchortext'], $links[$group])) {
+						// check to see if group exists			
+						if ( array_key_exists( $group, $links ) ) {
+										
+							// check to see if subgroup is already present in the main array
+							if ( array_key_exists( $subgroup, $links[ $group ] ) ) {
 								// merge various elements?? not now.
-								//check to see if there is an existing subgroup
 								
-								if (array_key_exists('subgroup', $links[$group][$link['anchortext']])) {
+								//check to see if there is an existing set of subgroup links
+								if ( array_key_exists( 'subgroup', $links[ $group ][ $subgroup ] ) ) {
 									// if so, merge the subgroups
-									$links[$group][$link['anchortext']]['subgroup'] = array_merge($links[$group][$link['anchortext']]['subgroup'], $link['subgroup']);
-								}	
+									$links[ $group ][ $subgroup ][ 'subgroup' ] = array_merge( $links[ $group ][ $subgroup ][ 'subgroup' ], $link[ 'subgroup' ] );
+								} else {
+									
+								}
 							} else {
 								// else populate the link
-								$links[$group][$link['anchortext']] = $link;	
+								$links[$group][$subgroup] = $link;	
 							}
 							
 						} else {
-							$links[$group][$link['anchortext']] = $link;
+							$links[$group][$subgroup] = $link;
 						}
 					}					
 					
 				}
-			}
-			
+			}		
 		}
 		
 		if ( isset( $links[$group_name] ) ) { 
+	
 			return $links[$group_name];	
 		}
 	}
@@ -853,8 +856,6 @@ class owa_coreAPI {
 			owa_coreAPI::profile(__CLASS__, __FUNCTION__, __LINE__);
 		}
 		
-		$service->setBrowscap($bcap);
-		
 		// form event if one was not passed
 		$class= 'owa_event';
 		if (!($message instanceof $class)) {
@@ -864,21 +865,51 @@ class owa_coreAPI {
 		} else {
 			$event = $message;
 		}
+		
+		// STAGE 1 - set environmental properties from SERVER
+		$teh = owa_coreAPI::getInstance( 'owa_trackingEventHelpers', OWA_BASE_CLASS_DIR.'trackingEventHelpers.php');
+		$environmentals = $service->getMap( 'tracking_properties_environmental' );
+		$teh->setTrackerProperties( $event, $environmentals );
 								
 		// Filter XSS exploits from event properties
-		$event->cleanProperties();
+		//$event->cleanProperties();
 		
 		// do not log if the do not log property is set on the event.
 		if ($event->get('do_not_log')) {
 			return false;
 		}
 		
-		// lookup which event processor to use to process this event type
-		$processor_action = owa_coreAPI::getEventProcessor($event->getEventType());
+		// check to see if IP should be excluded
+		if ( owa_coreAPI::isIpAddressExcluded( $event->get('ip_address') ) ) {
+			owa_coreAPI::debug("Not logging event. IP address found in exclusion list.");
+			return false;
+		}
 		
-		return owa_coreAPI::handleRequest(array('event' => $event), $processor_action);
+		// queue for later or process event straight away
+		if ( owa_coreAPI::getSetting( 'base', 'queue_events' ) || 
+			 owa_coreAPI::getSetting( 'base', 'queue_incoming_tracking_events' ) ) {
+			
+			$q = owa_coreAPI::getEventQueue( 'incoming_tracking_events' );
+			owa_coreAPI::debug('Queuing '.$event->getEventType().' event with properties: '.print_r($event->getProperties(), true ) );
+			$q->sendMessage( $event );
+			
+		} else {
+			
+			// lookup which event processor to use to process this event type
+			$processor_action = owa_coreAPI::getEventProcessor( $event->getEventType() );
+			return owa_coreAPI::handleRequest( array( 'event' => $event ), $processor_action );
+		}		
 	}
-
+	
+	public static function getInstance( $class, $path ) {
+		
+		if ( ! class_exists( $class ) ) {
+			
+			require_once( $path );
+		}
+		
+		return $class::getInstance();
+	}
 	
 	public static function displayImage($data) {
 		
@@ -995,26 +1026,11 @@ class owa_coreAPI {
 	public static function makeTimePeriod($time_period, $params = array()) {
 		
 		$period = owa_coreAPI::supportClassFactory('base', 'timePeriod');
-		$map = array();
-		
-		if (array_key_exists('startDate', $params)) {
-			$map['startDate'] = $params['startDate'];			
+
+		if ( ! array_key_exists('period', $params)) {
+			$params['period'] = $time_period;
 		}
-		
-		if (array_key_exists('endDate', $params)) {
-			$map['endDate'] = $params['endDate'];
-		}
-		
-		if (array_key_exists('startTime', $params)) {
-			$map['startTime'] = $params['startTime'];			
-		}
-		
-		if (array_key_exists('endTime', $params)) {
-			$map['endTime'] = $params['endTime'];
-		}
-		
-		$period->set($time_period, $map);
-		
+		$period->setFromMap( $params );
 		return $period;
 	}
 
@@ -1320,8 +1336,10 @@ class owa_coreAPI {
 		
 		$time = owa_coreAPI::getNonceTimeInterval();
 		$cu = owa_coreAPI::getCurrentUser();
-		$user_id = $cu->getUserData( 'user_id' );
+		$user_id = $cu->getUserData( 'user_id' ); 
+		
 		$full_nonce = $time . $action . $user_id . 'owa_nonce';
+		
 		$nonce = substr( owa_coreAPI::saltedHash($full_nonce, 'nonce'), -12, 10);
 		
 		return $nonce;
@@ -1330,8 +1348,10 @@ class owa_coreAPI {
 	public static function saltedHash( $data, $scheme, $hash_type = 'md5' ) {
 		
 		$salt = owa_coreAPI::getSalt( $scheme );
-		return hash_hmac( $hash_type, $data, $salt );
+		return owa_lib::hash( $hash_type, $data, $salt );
 	}
+	
+
 	
 	public static function getSalt( $scheme ) {
 		
@@ -1344,7 +1364,7 @@ class owa_coreAPI {
 			$cached_salts = array();
 			$ns = strtoupper( owa_coreAPI::getSetting('base', 'ns') );
 		
-			foreach (array('NONCE', 'SECRET') as $f ) {
+			foreach (array('NONCE', 'SECRET', 'AUTH') as $f ) {
 				
 				foreach (array('KEY', 'SALT') as $s ) {
 		
@@ -1354,7 +1374,7 @@ class owa_coreAPI {
 						continue;
 					} else {
 						
-						$cached_salts[ $scheme.'_'.$s ] = constant("$const");
+						$cached_salts[ $f.'_'.$s ] = constant("$const");
 					}
 				}
 			}	

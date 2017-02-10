@@ -230,7 +230,7 @@ abstract class owa_module extends owa_base {
 		/**
 		 * Register Filters
 		 */
-		$this->registerFilters();
+		//$this->registerFilters();
 		
 		/**
 		 * Register Metrics
@@ -299,7 +299,7 @@ abstract class owa_module extends owa_base {
 		
 		return $this->nav_links;
 	}
-		
+			
 	/**
 	 * Abstract method for registering event handlers
 	 *
@@ -339,9 +339,34 @@ abstract class owa_module extends owa_base {
 	 * @param string $handler_name
 	 * @return boolean
 	 */
-	function registerFilter($filter_name, $handler_name, $method, $priority = 10, $dir = 'filters') {
+	function registerFilter($filter_name, $handler_name, $method = '', $priority = 10, $dir = 'filters') {
 		
-		if ( ! is_object( $handler_name ) ) {
+		// if it's an object
+		if ( is_object( $handler_name ) ) {
+		
+			owa_coreAPI::registerFilter($filter_name, array($handler_name, $method), $priority);
+		
+		// if it's a static method name
+		} elseif ( strpos( $handler_name, '::') ) {
+			
+			owa_coreAPI::registerFilter($filter_name, $handler_name, $priority);
+			
+		// else try to create the class object
+		} else {
+			// create object
+			if ( ! class_exists( $handler_name ) ) {		
+			
+				//$handler = &owa_lib::factory($handler_dir,'owa_', $handler_name);
+				$class = owa_coreAPI::moduleGenericFactory($this->name, $dir, $handler_name, $class_suffix = null, $params = '', $class_ns = 'owa_');
+			}
+			
+			// register
+			owa_coreAPI::registerFilter($filter_name, array($class, $method), $priority);
+		}
+		
+		
+		/*
+if ( ! is_object( $handler_name ) ) {
 			
 			if ( ! class_exists( $handler_name ) ) {		
 			
@@ -352,6 +377,7 @@ abstract class owa_module extends owa_base {
 		
 		
 		return owa_coreAPI::registerFilter($filter_name, array($handler_name, $method), $priority);
+*/
 	}
 
 	/**
@@ -438,10 +464,7 @@ abstract class owa_module extends owa_base {
 	 * @param string $priviledge
 	 * @param string $groupName
 	 */
-	public function addNavigationLinkInSubGroup($subgroupName, $ref, $anchortext, $order = 0, $priviledge = 'view_reports', $groupName = 'Reports') {	
-		if (!isset($this->nav_links[$groupName][$subgroupName]) || !is_array($this->nav_links[$groupName][$subgroupName])) {
-			throw new Exception('Subgroup "'.$subgroupName.'" is not existend - add Subgroup first with addNavigationSubGroup ');
-		}
+	public function addNavigationLinkInSubGroup($subgroupName, $ref, $anchortext, $order = 0, $priviledge = 'view_reports', $groupName = 'Reports') {		
 		$this->nav_links[$groupName][$subgroupName]['subgroup'][] = $this->getLinkStruct($ref, $anchortext, $order,$priviledge);
 	}
 	
@@ -509,7 +532,7 @@ abstract class owa_module extends owa_base {
 		$errors = '';
 
 		// Install schema
-		if (!empty($this->entities)):
+		if (!empty($this->entities)) {
 		
 			foreach ($this->entities as $k => $v) {
 			
@@ -517,18 +540,17 @@ abstract class owa_module extends owa_base {
 				//$this->e->debug("about to  execute createtable");
 				$status = $entity->createTable();
 				
-				if ($status != true):
+				if ($status != true) {
 					$this->e->notice("Entity Installation Failed.");
 					$errors = true;
 					//return false;
-				endif;
+				}
 				
 			}
-		
-		endif;
+		}
 		
 		// activate module and persist configuration changes 
-		if ($errors != true):
+		if ($errors != true) {
 			
 			// run post install hook
 			$ret = $this->postInstall();
@@ -546,10 +568,10 @@ abstract class owa_module extends owa_base {
 			$this->e->notice("Installation complete.");
 			return true;
 			
-		else:
+		} else {
 			$this->e->notice("Installation failed.");
 			return false;
-		endif;
+		}
 
 	}
 	
@@ -588,9 +610,9 @@ abstract class owa_module extends owa_base {
 			
 			settype($seq, "integer");
 			
-			if ($seq > $current_schema_version):
+			if ($seq > $current_schema_version) {
 			
-				if ($seq <= $this->required_schema_version):
+				if ($seq <= $this->required_schema_version) {
 					$this->updates[$seq] = owa_coreAPI::updateFactory($this->name, substr($v['name'], 0, -4));
 					// if the cli update mode is required and we are not running via cli then return an error.
 					owa_coreAPI::debug('cli update mode required: '.$this->updates[$seq]->isCliModeRequired());
@@ -603,8 +625,8 @@ abstract class owa_module extends owa_base {
 					// set schema version from sequence number in file name. This ensures that only one update
 					// class can ever be in use for a particular schema version
 					$this->updates[$seq]->schema_version = $seq;
-				endif;
-			endif;	
+				}
+			}	
 			
 		}
 		
@@ -685,11 +707,11 @@ abstract class owa_module extends owa_base {
 		owa_coreAPI::debug("$this->name Schema version is $current_schema");
 		owa_coreAPI::debug("$this->name Required Schema version is $required_schema");
 		
-		if ($current_schema >= $required_schema):
+		if ($current_schema >= $required_schema) {
 			return true;
-		else:
+		} else {
 			return false;
-		endif;
+		}
 	}
 	
 	function getSchemaVersion() {
@@ -979,6 +1001,65 @@ abstract class owa_module extends owa_base {
 					 
 		$s = owa_coreAPI::serviceSingleton();
 		$s->setMapValue('background_jobs', $name, $job);
+	}
+	
+	/**
+	 * Register Environmental Tracking Properties
+	 *
+	 * These are tracking properties that are derived from the Server environment
+	 * and should be added to all tracking tracking events as they are recieved.
+	 *
+	 *
+	 * @var $type			string	the type of tracking property environmental|regular|derived
+	 *
+	 * 		environmental = properties that are only dependant on the PHP SERVER environment.
+	 *		regular 	  = properties that are set by clients
+	 *		derived		  = properties that are derived from or dependant on other properties				
+	 *
+	 * @var	$properties 	array 	an associative array of tracking properties
+	 *
+	 * Example:
+	 *
+	 * 		'REMOTE_HOST'		=> array(
+	 *			'default_value'		=> array( 'owa_trackingEventHelpers::remoteHostDefault' ),
+	 *			'required'			=> true,
+	 *			'data_type'			=> 'string',
+	 *			'filter'			=> true
+	 *		)
+	 *
+	 *
+	 * The key of the array is the name the property
+	 */
+	
+	function registerTrackingProperties( $type, $properties = array() ) {
+	
+		switch( strtolower( $type ) ) {
+			
+			case 'environmental':
+				$map_key = 'tracking_properties_environmental';
+				break;
+				
+			case 'regular':
+				$map_key = 'tracking_properties_regular';
+				break;
+			
+			case 'derived':
+				$map_key = 'tracking_properties_derived';
+				break;
+				
+			default:
+				$map_key = '';
+		}
+		
+		if ( is_array( $properties ) && $map_key ) {
+			
+			$s = owa_coreAPI::serviceSingleton();
+		
+			foreach ( $properties as $k => $property ) {
+				
+				$s->setMapValue( $map_key, $k, $property);
+			}			
+		}
 	}
 	
 	/**

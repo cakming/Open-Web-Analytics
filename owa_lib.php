@@ -430,6 +430,10 @@ class owa_lib {
 			$url.= 's';
 		} elseif ( isset( $_SERVER['SERVER_PORT'] ) && $_SERVER['SERVER_PORT'] == 443 ) {
 			$url.= 's';
+		} elseif ( isset( $_SERVER['HTTP_ORIGIN'] ) && substr( $_SERVER['HTTP_ORIGIN'], 0, 5 ) === 'https' ) {
+			$url.= 's';
+		} elseif ( isset( $_SERVER['HTTP_REFERER'] ) && substr( $_SERVER['HTTP_REFERER'], 0, 5 ) === 'https' ) {
+			$url.= 's';
 		}
 		
 		if ( isset( $_SERVER['HTTP_HOST'] ) ) {
@@ -450,15 +454,9 @@ class owa_lib {
 		return $url;
 	}
 	
-	public static function inputFilter($array) {
+	public static function inputFilter($input, $options = array() ) {
 		
-		if ( ! class_exists( 'owa_InputFilter' ) ) {
-			require_once(OWA_INCLUDE_DIR.'/class.inputfilter.php');
-		}
-		
-		$f = new owa_InputFilter;		
-		return $f->process($array);
-		
+		return owa_sanitize::cleanInput( $input, $options );		
 	}
 	
 	public static function fileInclusionFilter($str) {
@@ -564,7 +562,7 @@ class owa_lib {
      * @param string $url
      */
     public static function redirectBrowser($url) {
-    	
+    	//print ($url); exit;
 	    // 302 redirect to URL 
 		header ('Location: '.$url);
 		header ('HTTP/1.0 302 Found');
@@ -1003,6 +1001,12 @@ class owa_lib {
 	public static function encryptPassword($password) {
 		
 		return md5(strtolower($password).strlen($password));
+		//return owa_coreAPI::saltedHash( $password, 'auth');
+	}
+	
+	public static function hash( $hash_type = 'md5', $data, $salt = '' ) {
+		
+		return hash_hmac( $hash_type, $data, $salt );
 	}
 	
 	public static function timestampToYyyymmdd($timestamp = '') {

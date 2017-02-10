@@ -427,6 +427,12 @@ class owa_template extends Template {
 				
 				$string = owa_lib::implode_assoc('=>', '|||', $all_params);
 				break;
+			
+			case 'json': 
+			
+				$string = json_encode( $all_params );
+				
+				break;
 		}
 		
 		
@@ -487,7 +493,7 @@ class owa_template extends Template {
 		}
 		
 		// add nonce if called for
-		if ($add_nonce) {
+		if ($add_nonce) { 
 			if ( array_key_exists('do', $all_params) ) {
 				$action = $all_params['do'];	
 			} elseif ( array_key_exists('action', $all_params) ) {
@@ -507,7 +513,7 @@ class owa_template extends Template {
 			
 			foreach ($all_params as $n => $v) {
 				
-				$get .= $this->config['ns'].$n.'='.$v;
+				$get .= $this->config['ns'].owa_sanitize::escapeForDisplay($n).'='.owa_sanitize::escapeForDisplay($v);
 				
 				$i++;
 				

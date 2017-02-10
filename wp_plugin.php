@@ -5,7 +5,7 @@ Plugin Name: Open Web Analytics
 Plugin URI: http://www.openwebanalytics.com
 Description: This plugin enables Wordpress blog owners to use the Open Web Analytics Framework.
 Author: Peter Adams
-Version: v1.5.1
+Version: v1.6.0
 Author URI: http://www.openwebanalytics.com
 */
 
@@ -221,8 +221,6 @@ function &owa_getInstance() {
 		$owa->setSetting( 'base', 'action_url', get_bloginfo('url').'/index.php?owa_specialAction' );
 		$owa->setSetting( 'base', 'api_url', get_bloginfo('url').'/index.php?owa_apiAction' );
 		$owa->setSetting( 'base', 'is_embedded', true );
-		// needed as old installs might have this turned on by default...
-		$owa->setSetting( 'base', 'delay_first_hit', false );
 		
 		// Access WP current user object to check permissions
 		//$current_user = owa_getCurrentWpUser();
